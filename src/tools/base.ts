@@ -44,46 +44,29 @@ export abstract class AbstractTool<TParams = any, TResult = any> {
         throw new Error(`Verilator tool '${this.binaryName}' is not available`);
       }
 
-      // Check cache if applicable
-      const cacheKey = this.getCacheKey(validatedParams);
-      if (cacheKey && this.shouldUseCache(validatedParams)) {
-        const cached = await this.cacheManager.get<TResult>(
-          cacheKey,
-          this.getFilePath(validatedParams)
-        );
-        if (cached !== null) {
-          logger.debug(`Cache hit for ${this.toolName}`);
-          return {
-            success: true,
-            data: cached,
-            cached: true,
-            executionTime: Date.now() - startTime,
-          };
-        }
-      }
+      // Cache disabled temporarily to fix execution issues
 
       // Build command arguments
       const args = await this.buildArguments(validatedParams);
       logger.info(`Executing ${this.toolName} with args:`, args);
 
       // Execute command
+      logger.debug(`Executing command: ${toolPath} ${args.join(' ')}`);
       const result = await this.executor.execute(toolPath, args, {
         timeout: this.getTimeout(validatedParams),
         cwd: this.getCwd(validatedParams),
       });
 
+      if (!result) {
+        throw new Error(`Command execution returned null/undefined result`);
+      }
+
+      logger.debug(`Command result: exitCode=${result.exitCode}, stdout=${result.stdout.length} chars, stderr=${result.stderr.length} chars`);
+
       // Process result
       const processedResult = await this.processResult(result, validatedParams);
 
-      // Cache if applicable
-      if (cacheKey && this.shouldUseCache(validatedParams) && processedResult.success) {
-        await this.cacheManager.set(
-          cacheKey,
-          processedResult.data,
-          this.getFilePath(validatedParams),
-          this.getDependencies(validatedParams)
-        );
-      }
+      // Cache disabled temporarily
 
       // Extract warnings
       const warnings = ErrorHandler.extractWarnings(result.stderr);

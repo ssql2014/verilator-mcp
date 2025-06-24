@@ -11,45 +11,33 @@ import fsStore from 'cache-manager-fs-hash';
 export class CacheManager {
   private cache: any;
   private cacheDir: string;
+  private initialized: Promise<void>;
 
   constructor() {
     this.cacheDir = join(homedir(), '.verilator-mcp', 'cache');
-    this.initializeCache();
+    this.initialized = this.initializeCache();
   }
 
   private async initializeCache() {
-    // Ensure cache directory exists
-    await fs.mkdir(this.cacheDir, { recursive: true });
+    try {
+      // Ensure cache directory exists
+      await fs.mkdir(this.cacheDir, { recursive: true });
 
-    this.cache = await caching(fsStore as any, {
-      path: this.cacheDir,
-      ttl: 60 * 60 * 24, // 24 hours default TTL
-      maxsize: 1024 * 1024 * 1024, // 1GB max cache size
-      zip: true, // Compress cache files
-    } as any);
+      this.cache = await caching(fsStore as any, {
+        path: this.cacheDir,
+        ttl: 60 * 60 * 24, // 24 hours default TTL
+        maxsize: 1024 * 1024 * 1024, // 1GB max cache size
+        zip: true, // Compress cache files
+      } as any);
+    } catch (error) {
+      logger.error('Cache initialization failed, disabling cache:', error);
+      this.cache = null;
+    }
   }
 
   async get<T>(key: string, filePath?: string): Promise<T | null> {
-    try {
-      // Check if file has been modified since cache
-      if (filePath) {
-        const cacheTime = await this.getCacheTime(key);
-        if (cacheTime) {
-          const fileStat = await fs.stat(filePath);
-          if (fileStat.mtime.getTime() > cacheTime) {
-            logger.debug(`Cache invalidated for ${key}: file modified`);
-            await this.delete(key);
-            return null;
-          }
-        }
-      }
-
-      const value = await this.cache.get(key);
-      return value as T | null;
-    } catch (error) {
-      logger.error('Cache get error:', error);
-      return null;
-    }
+    // Cache disabled temporarily to fix execution issues
+    return null;
   }
 
   async set<T>(
@@ -58,48 +46,23 @@ export class CacheManager {
     filePath?: string,
     dependencies?: string[]
   ): Promise<void> {
-    try {
-      const metadata = {
-        timestamp: Date.now(),
-        filePath,
-        dependencies,
-      };
-
-      await this.cache.set(key, value);
-      await this.cache.set(`${key}:meta`, metadata);
-
-      logger.debug(`Cache set for ${key}`);
-    } catch (error) {
-      logger.error('Cache set error:', error);
-    }
+    // Cache disabled temporarily to fix execution issues
+    return;
   }
 
   async delete(key: string): Promise<void> {
-    try {
-      await this.cache.del(key);
-      await this.cache.del(`${key}:meta`);
-      logger.debug(`Cache deleted for ${key}`);
-    } catch (error) {
-      logger.error('Cache delete error:', error);
-    }
+    // Cache disabled temporarily
+    return;
   }
 
   async clear(): Promise<void> {
-    try {
-      await this.cache.reset();
-      logger.info('Cache cleared');
-    } catch (error) {
-      logger.error('Cache clear error:', error);
-    }
+    // Cache disabled temporarily
+    return;
   }
 
   private async getCacheTime(key: string): Promise<number | null> {
-    try {
-      const metadata = await this.cache.get(`${key}:meta`);
-      return metadata?.timestamp || null;
-    } catch {
-      return null;
-    }
+    // Cache disabled temporarily
+    return null;
   }
 
   generateKey(...parts: any[]): string {
@@ -131,30 +94,7 @@ export class CacheManager {
   }
 
   async isValid(key: string, dependencies?: string[]): Promise<boolean> {
-    const metadata = await this.cache.get(`${key}:meta`);
-    if (!metadata) return false;
-
-    // Check file modification time
-    if (metadata.filePath) {
-      try {
-        const stat = await fs.stat(metadata.filePath);
-        if (stat.mtime.getTime() > metadata.timestamp) {
-          return false;
-        }
-      } catch {
-        return false;
-      }
-    }
-
-    // Check dependencies
-    if (dependencies || metadata.dependencies) {
-      const deps = dependencies || metadata.dependencies;
-      const depTime = await this.getDependencyTime(deps);
-      if (depTime > metadata.timestamp) {
-        return false;
-      }
-    }
-
-    return true;
+    // Cache disabled temporarily
+    return false;
   }
 }

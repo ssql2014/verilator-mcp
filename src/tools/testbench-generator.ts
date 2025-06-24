@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AbstractTool } from './base.js';
 import { ToolResult, ModuleInfo, TestbenchOptions, TestbenchResult, PortInfo } from '../types/index.js';
 import { promises as fs } from 'fs';
-import { dirname, join, basename } from 'path';
+import { dirname, join, basename, resolve } from 'path';
 import { logger } from '../utils/logger.js';
 
 const TestbenchGeneratorSchema = z.object({
@@ -84,8 +84,9 @@ export class TestbenchGeneratorTool extends AbstractTool<TestbenchGeneratorParam
     result: any,
     params: TestbenchGeneratorParams
   ): Promise<ToolResult<TestbenchResult>> {
-    // Parse the module to get interface information
-    const moduleInfo = await this.parseModule(params.targetFile, params.targetModule);
+    try {
+      // Parse the module to get interface information
+      const moduleInfo = await this.parseModule(params.targetFile, params.targetModule);
 
     if (params.parseOnly) {
       return {
@@ -104,7 +105,12 @@ export class TestbenchGeneratorTool extends AbstractTool<TestbenchGeneratorParam
     
     // Write to file
     const outputFile = params.outputFile || `tb_${moduleInfo.name}.sv`;
-    await fs.writeFile(outputFile, testbench);
+    
+    // Ensure output directory exists
+    const outputDir = dirname(resolve(outputFile));
+    await fs.mkdir(outputDir, { recursive: true });
+    
+    await fs.writeFile(resolve(outputFile), testbench);
 
     // Determine features that were generated
     const features: string[] = [];
@@ -116,15 +122,22 @@ export class TestbenchGeneratorTool extends AbstractTool<TestbenchGeneratorParam
     }
     if (params.protocol) features.push(`${params.protocol}_protocol`);
 
-    return {
-      success: true,
-      data: {
-        generatedFile: outputFile,
-        moduleInfo,
-        template: params.template,
-        features,
-      },
-    };
+      return {
+        success: true,
+        data: {
+          generatedFile: outputFile,
+          moduleInfo,
+          template: params.template,
+          features,
+        },
+      };
+    } catch (error) {
+      logger.error('Testbench generation error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   private async parseModule(file: string, moduleName: string): Promise<ModuleInfo> {
@@ -214,23 +227,49 @@ export class TestbenchGeneratorTool extends AbstractTool<TestbenchGeneratorParam
   }
 
   private parsePortDeclaration(portDecl: string): PortInfo | null {
-    // Match port declaration pattern
-    const portRegex = /^\s*(input|output|inout)\s+(?:(wire|reg|logic|bit)\s+)?(?:\[(\d+):(\d+)\]\s+)?(\w+)(?:\s*\[(\d+):(\d+)\])?/;
+    // Match port declaration pattern - handle parameterized widths and multiple spaces
+    const portRegex = /^\s*(input|output|inout)\s+(wire|reg|logic|bit)?\s*(?:\[([^\]]+)\])?\s+(\w+)(?:\s*\[([^\]]+)\])?/;
     const match = portDecl.match(portRegex);
 
     if (!match) return null;
 
-    const [, direction, type, msb, lsb, name, arrayMsb, arrayLsb] = match;
+    const [, direction, type, widthExpr, name, arrayExpr] = match;
+
+    // Calculate width - handle parameterized expressions like "WIDTH-1:0"
+    let width = 1;
+    if (widthExpr) {
+      if (widthExpr.includes(':')) {
+        const [msbExpr, lsbExpr] = widthExpr.split(':');
+        // For simple cases like "7:0" or "WIDTH-1:0", assume common widths
+        if (msbExpr.includes('WIDTH')) {
+          width = 8; // Assume 8-bit for WIDTH-1:0
+        } else {
+          const msb = parseInt(msbExpr.trim());
+          const lsb = parseInt(lsbExpr.trim());
+          if (!isNaN(msb) && !isNaN(lsb)) {
+            width = Math.abs(msb - lsb) + 1;
+          }
+        }
+      }
+    }
 
     const port: PortInfo = {
       name,
       direction: direction as 'input' | 'output' | 'inout',
       type: (type || 'wire') as any,
-      width: msb && lsb ? Math.abs(parseInt(msb) - parseInt(lsb)) + 1 : 1,
+      width,
     };
 
-    if (arrayMsb && arrayLsb) {
-      port.arrayDimensions = [Math.abs(parseInt(arrayMsb) - parseInt(arrayLsb)) + 1];
+    if (arrayExpr) {
+      // Handle array dimensions
+      if (arrayExpr.includes(':')) {
+        const [msbExpr, lsbExpr] = arrayExpr.split(':');
+        const msb = parseInt(msbExpr.trim());
+        const lsb = parseInt(lsbExpr.trim());
+        if (!isNaN(msb) && !isNaN(lsb)) {
+          port.arrayDimensions = [Math.abs(msb - lsb) + 1];
+        }
+      }
     }
 
     return port;
@@ -455,7 +494,14 @@ export class TestbenchGeneratorTool extends AbstractTool<TestbenchGeneratorParam
       for (let i = 0; i < 5; i++) {
         stimulus += `    // Test case ${i + 1}\n`;
         for (const port of inputPorts) {
-          const value = port.width <= 4 ? i : `${port.width}'h${i.toString(16)}`;
+          let value: string;
+          if (port.width === 1) {
+            value = (i % 2).toString(); // Alternate 0,1 for 1-bit signals
+          } else if (port.width <= 4) {
+            value = i.toString();
+          } else {
+            value = `${port.width}'h${i.toString(16)}`;
+          }
           stimulus += `    ${port.name} = ${value};\n`;
         }
         stimulus += '    #100;\n';

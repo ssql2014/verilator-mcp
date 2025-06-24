@@ -79,7 +79,7 @@ export class SimulateTool extends AbstractTool<SimulateParams, SimulationResult>
         });
 
         if (!tbResult.success || !tbResult.data) {
-          throw new Error('Failed to generate testbench: ' + tbResult.error);
+          throw new Error('Failed to generate testbench: ' + (tbResult.error || 'Unknown error'));
         }
 
         testbenchFile = tbResult.data.generatedFile;
@@ -119,7 +119,7 @@ export class SimulateTool extends AbstractTool<SimulateParams, SimulationResult>
         });
 
         if (!compileResult.success || !compileResult.data) {
-          throw new Error('Compilation failed: ' + compileResult.error);
+          throw new Error('Compilation failed: ' + (compileResult.error || 'Unknown error'));
         }
 
         buildDir = compileResult.data.outputDir;

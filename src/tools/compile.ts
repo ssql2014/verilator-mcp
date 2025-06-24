@@ -114,18 +114,20 @@ export class CompileTool extends AbstractTool<CompileParams, CompileResult> {
       }
     }
 
-    // Warnings
-    const defaultWarnings = ['lint', 'style'];
-    const warnings = params.warnings || defaultWarnings;
+    // Warnings - removed default warnings that cause issues in newer Verilator
+    const warnings = params.warnings || [];
     for (const warning of warnings) {
       args.push(`-W${warning}`);
     }
 
     // Suppress warnings
-    if (params.suppressWarnings) {
-      for (const warning of params.suppressWarnings) {
-        args.push(`-Wno-${warning}`);
-      }
+    const defaultSuppressWarnings = ['EOFNEWLINE', 'TIMESCALEMOD', 'COVERIGN'];
+    const suppressWarnings = params.suppressWarnings ? 
+      [...defaultSuppressWarnings, ...params.suppressWarnings] : 
+      defaultSuppressWarnings;
+      
+    for (const warning of suppressWarnings) {
+      args.push(`-Wno-${warning}`);
     }
 
     // Additional Verilator flags
@@ -133,9 +135,19 @@ export class CompileTool extends AbstractTool<CompileParams, CompileResult> {
       args.push(...params.verilatorFlags);
     }
 
-    // Build executable
-    args.push('--exe');
-    args.push('--build');
+    // Enable timing for testbenches
+    args.push('--timing');
+    
+    // Only add --exe and --build if we have a C++ testbench
+    // For pure SystemVerilog testbenches, just compile to library
+    const hasCppFile = params.files.some(f => f.endsWith('.cpp') || f.endsWith('.cc'));
+    if (hasCppFile) {
+      args.push('--exe');
+      args.push('--build');
+    } else {
+      // Just compile to library for SystemVerilog testbenches
+      args.push('--binary');
+    }
 
     // Input files
     const expandedFiles = await this.expandFilePatterns(params.files);
@@ -148,51 +160,69 @@ export class CompileTool extends AbstractTool<CompileParams, CompileResult> {
     result: any,
     params: CompileParams
   ): Promise<ToolResult<CompileResult>> {
-    const errors = ErrorHandler.parseVerilatorOutput(result.stderr);
-    const actualErrors = errors.filter(e => e.type === 'error');
-    const warnings = errors.filter(e => e.type === 'warning');
-
-    // Check if compilation was successful
-    const success = result.exitCode === 0 && actualErrors.length === 0;
-
-    // Find generated executable
-    let executable: string | undefined;
-    if (success) {
-      try {
-        const exeName = `V${params.topModule || 'top'}`;
-        const exePath = join(params.outputDir, exeName);
-        await fs.access(exePath);
-        executable = exePath;
-      } catch {
-        // Executable might have a different name or not be built
-      }
-    }
-
-    // Check if makefile was generated
-    let makefileGenerated = false;
     try {
-      const makefilePath = join(params.outputDir, `V${params.topModule || 'top'}.mk`);
-      await fs.access(makefilePath);
-      makefileGenerated = true;
-    } catch {
-      // Makefile not found
-    }
+      if (!result) {
+        throw new Error('No result from Verilator execution');
+      }
+      
+      logger.debug(`Verilator result - exitCode: ${result.exitCode}, stderr: ${result.stderr?.substring(0, 500)}...`);
+      
+      const errors = ErrorHandler.parseVerilatorOutput(result.stderr || '');
+      const actualErrors = errors.filter(e => e.type === 'error');
+      const warnings = errors.filter(e => e.type === 'warning');
 
-    // Extract statistics from output
-    const stats = this.extractCompilationStats(result.stdout);
+      // Check if compilation was successful
+      const success = result.exitCode === 0 && actualErrors.length === 0;
 
-    return {
-      success,
-      data: {
+      // Find generated executable
+      let executable: string | undefined;
+      if (success) {
+        try {
+          const exeName = `V${params.topModule || 'top'}`;
+          const exePath = join(params.outputDir, exeName);
+          await fs.access(exePath);
+          executable = exePath;
+        } catch {
+          // Executable might have a different name or not be built
+        }
+      }
+
+      // Check if makefile was generated
+      let makefileGenerated = false;
+      try {
+        const makefilePath = join(params.outputDir, `V${params.topModule || 'top'}.mk`);
+        await fs.access(makefilePath);
+        makefileGenerated = true;
+      } catch {
+        // Makefile not found
+      }
+
+      // Extract statistics from output
+      const stats = this.extractCompilationStats(result.stdout);
+
+      const toolResult = {
         success,
-        outputDir: resolve(params.outputDir),
-        executable,
-        makefileGenerated,
-        errors: actualErrors,
-        warnings,
-        stats,
-      },
-    };
+        data: {
+          success,
+          outputDir: resolve(params.outputDir),
+          executable,
+          makefileGenerated,
+          errors: actualErrors,
+          warnings,
+          stats,
+        },
+        error: success ? undefined : `Compilation failed: ${actualErrors.map(e => e.message).join('; ')}`,
+      };
+
+      logger.debug(`Returning compile result: ${JSON.stringify({ success, errorCount: actualErrors.length, warningCount: warnings.length })}`);
+      return toolResult;
+    } catch (error) {
+      logger.error('Error in compile processResult:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   private async expandFilePatterns(patterns: string[]): Promise<string[]> {
@@ -227,7 +257,7 @@ export class CompileTool extends AbstractTool<CompileParams, CompileResult> {
     return undefined;
   }
 
-  protected getCacheKey(params: CompileParams): string {
+  protected getCacheKey(params: CompileParams): string | null {
     // Create cache key based on files, flags, and options
     const fileKey = params.files.sort().join(',');
     const flagKey = JSON.stringify({
