@@ -1,6 +1,10 @@
 # Verilator MCP Server
 
-An intelligent Model Context Protocol (MCP) server for Verilator that provides RTL simulation, automatic testbench generation, and natural language query capabilities.
+[![MCP](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io)
+[![Verilator](https://img.shields.io/badge/Verilator-5.0+-green)](https://verilator.org)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+An intelligent Model Context Protocol (MCP) server for Verilator that provides RTL simulation, automatic testbench generation, and natural language query capabilities. This tool bridges the gap between AI assistants and hardware verification, making RTL simulation more accessible and intelligent.
 
 ## Features
 
