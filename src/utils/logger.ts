@@ -14,27 +14,22 @@ export const logger = winston.createLogger({
   ),
   defaultMeta: { service: 'verilator-mcp' },
   transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      ),
-      silent: process.env.NODE_ENV === 'test',
+    // Always use file transport for MCP servers
+    // Console output must be reserved for JSON-RPC only
+    new winston.transports.File({
+      filename: join(logDir, 'error.log'),
+      level: 'error',
+    }),
+    new winston.transports.File({
+      filename: join(logDir, 'combined.log'),
     }),
   ],
 });
 
-// Add file transport in production
-if (process.env.NODE_ENV === 'production') {
-  logger.add(
-    new winston.transports.File({
-      filename: join(logDir, 'error.log'),
-      level: 'error',
-    })
-  );
-  logger.add(
-    new winston.transports.File({
-      filename: join(logDir, 'combined.log'),
-    })
-  );
+// Ensure log directory exists
+import { mkdirSync } from 'fs';
+try {
+  mkdirSync(logDir, { recursive: true });
+} catch (error) {
+  // Ignore error if directory already exists
 }
