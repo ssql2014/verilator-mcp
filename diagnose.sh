@@ -38,8 +38,19 @@ echo ""
 
 # Test server
 echo "4. Testing server..."
-timeout 5 node test-server.js
-if [ $? -eq 0 ]; then
+if command -v gtimeout &> /dev/null; then
+    gtimeout 5 node test-server.js
+    result=$?
+elif command -v timeout &> /dev/null; then
+    timeout 5 node test-server.js
+    result=$?
+else
+    # macOS fallback - just run the test without timeout
+    node test-server.js
+    result=$?
+fi
+
+if [ $result -eq 0 ]; then
     echo "✓ Server test passed"
 else
     echo "✗ Server test failed"
