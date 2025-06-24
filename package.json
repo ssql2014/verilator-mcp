@@ -1,6 +1,6 @@
 {
   "name": "@mcp/verilator-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server for Verilator RTL simulation and verification",
   "main": "dist/index.js",
   "bin": {
