@@ -12,9 +12,20 @@ fi
 
 # Check Verilator installation
 if ! command -v verilator &> /dev/null; then
-    echo "Warning: Verilator not found in PATH."
-    echo "Please install Verilator or add it to your PATH."
-    echo "Installation instructions: https://verilator.org/guide/latest/install.html"
+    echo "Error: Verilator is not installed!"
+    echo ""
+    echo "Please install Verilator first:"
+    echo ""
+    echo "macOS (Homebrew):"
+    echo "  brew install verilator"
+    echo ""
+    echo "Ubuntu/Debian:"
+    echo "  sudo apt-get install verilator"
+    echo ""
+    echo "From source:"
+    echo "  https://verilator.org/guide/latest/install.html"
+    echo ""
+    exit 1
 else
     echo "Found Verilator: $(verilator --version)"
 fi

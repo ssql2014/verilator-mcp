@@ -57,10 +57,40 @@ An intelligent Model Context Protocol (MCP) server for Verilator that provides R
 - Verilator 5.0+ installed and in PATH
 - Git
 
-### Quick Start
+### Step 1: Install Verilator
+Verilator must be installed before using this MCP server.
+
+#### macOS (Homebrew)
+```bash
+brew install verilator
+```
+
+#### Ubuntu/Debian
+```bash
+sudo apt-get update
+sudo apt-get install verilator
+```
+
+#### From Source
+```bash
+git clone https://github.com/verilator/verilator
+cd verilator
+autoconf
+./configure
+make -j `nproc`
+sudo make install
+```
+
+#### Verify Installation
+```bash
+verilator --version
+# Should output: Verilator 5.0 or higher
+```
+
+### Step 2: Install Verilator MCP
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/ssql2014/verilator-mcp.git
 cd verilator-mcp
 
 # Install dependencies
@@ -70,13 +100,13 @@ npm install
 npm run build
 
 # Test the server
-npm start
+npm test
+# Or run diagnostic
+./diagnose.sh
 ```
 
-## Configuration
-
-### Claude Desktop Configuration
-Add to your Claude Desktop configuration file:
+### Step 3: Configure Claude Desktop
+Add to your Claude Desktop configuration file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
@@ -91,6 +121,9 @@ Add to your Claude Desktop configuration file:
   }
 }
 ```
+
+### Step 4: Restart Claude Desktop
+After updating the configuration, restart Claude Desktop to load the MCP server.
 
 ### Environment Variables
 - `LOG_LEVEL`: Set logging level (debug, info, warn, error)
@@ -419,22 +452,41 @@ LOG_LEVEL=debug npm start
 
 ## Troubleshooting
 
+### Quick Diagnostics
+Run the diagnostic script to check your setup:
+```bash
+./diagnose.sh
+```
+
 ### Common Issues
 
 1. **Verilator not found**
-   - Ensure Verilator is installed: `verilator --version`
-   - Add Verilator to PATH
-   - Set VERILATOR_PATH environment variable
+   ```bash
+   # Install Verilator first!
+   brew install verilator  # macOS
+   sudo apt-get install verilator  # Ubuntu/Debian
+   
+   # Verify installation
+   verilator --version
+   ```
 
-2. **Compilation errors**
+2. **Server not starting in Claude Desktop**
+   - Ensure Verilator is installed (see above)
+   - Check paths in Claude Desktop config are absolute
+   - Restart Claude Desktop after configuration changes
+   - Run `./diagnose.sh` to check setup
+
+3. **Compilation errors**
    - Check file paths are correct
    - Verify SystemVerilog syntax
    - Review error messages in logs
 
-3. **Testbench generation fails**
+4. **Testbench generation fails**
    - Ensure module has standard port declarations
    - Check for unsupported constructs
    - Try simpler template options
+
+For detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## Contributing
 
